@@ -1,0 +1,72 @@
+[
+  {
+    "case_id": "P001",
+    "raw_summary": "Patient P001: 54-year-old with type 2 diabetes mellitus. HbA1c 8.2%, BMI 31.4, eGFR 78, ALT 35. Medications: metformin, atorvastatin. History: hypertension.",
+    "expected_verdict": "eligible",
+    "expected_clause_ids": ["TRIAL01-INC-01", "TRIAL01-INC-02", "TRIAL01-INC-03", "TRIAL01-INC-04", "TRIAL01-INC-05"],
+    "note": "clean eligible case"
+  },
+  {
+    "case_id": "P002",
+    "raw_summary": "Patient P002: 61-year-old with type 2 diabetes mellitus. HbA1c 8.5%, BMI 29.0, eGFR 70, ALT 30. Medications: metformin, insulin glargine. History: none.",
+    "expected_verdict": "ineligible",
+    "expected_clause_ids": ["TRIAL01-EXC-04"],
+    "note": "banned medication (insulin)"
+  },
+  {
+    "case_id": "P003",
+    "raw_summary": "Patient P003: 48-year-old with type 2 diabetes mellitus. HbA1c 10.4%, BMI 33.0, eGFR 85, ALT 28. Medications: metformin. History: none.",
+    "expected_verdict": "ineligible",
+    "expected_clause_ids": ["TRIAL01-EXC-02"],
+    "note": "HbA1c > 9"
+  },
+  {
+    "case_id": "P004",
+    "raw_summary": "Patient P004: 67-year-old with type 2 diabetes mellitus. HbA1c 7.8%, BMI 28.0, eGFR 38, ALT 40. Medications: metformin, amlodipine. History: hypertension.",
+    "expected_verdict": "ineligible",
+    "expected_clause_ids": ["TRIAL01-EXC-03"],
+    "note": "renal impairment eGFR < 45"
+  },
+  {
+    "case_id": "P005",
+    "raw_summary": "Patient P005: 35-year-old with type 1 diabetes mellitus. HbA1c 8.0%, BMI 26.0, eGFR 95, ALT 22. Medications: insulin aspart, insulin glargine. History: none.",
+    "expected_verdict": "ineligible",
+    "expected_clause_ids": ["TRIAL01-EXC-05", "TRIAL01-EXC-04"],
+    "note": "type 1 diabetes on insulin"
+  },
+  {
+    "case_id": "P006",
+    "raw_summary": "Patient P006: 79-year-old with type 2 diabetes mellitus. HbA1c 7.6%, BMI 27.0, eGFR 55, ALT 30. Medications: metformin. History: osteoarthritis.",
+    "expected_verdict": "ineligible",
+    "expected_clause_ids": ["TRIAL01-EXC-01"],
+    "note": "age > 75"
+  },
+  {
+    "case_id": "P007",
+    "raw_summary": "Patient P007: 50-year-old with type 2 diabetes mellitus. HbA1c 7.9%, BMI 30.0, eGFR 80, ALT 25. Medications: metformin, lisinopril. History: none.",
+    "expected_verdict": "eligible",
+    "expected_clause_ids": ["TRIAL01-INC-01", "TRIAL01-INC-02", "TRIAL01-INC-03", "TRIAL01-INC-04", "TRIAL01-INC-05"],
+    "note": "clean eligible case"
+  },
+  {
+    "case_id": "P008",
+    "raw_summary": "Patient P008: 58-year-old with type 2 diabetes mellitus. HbA1c 9.1%, BMI 30.0, eGFR 70, ALT 30. Medications: metformin. History: none.",
+    "expected_verdict": "review",
+    "expected_clause_ids": ["TRIAL01-EXC-02"],
+    "note": "BORDERLINE: HbA1c 9.1 sits at the 9.0 exclusion edge -> coordinator review"
+  },
+  {
+    "case_id": "P009",
+    "raw_summary": "Patient P009: 44-year-old with type 2 diabetes mellitus. HbA1c 8.0%, BMI 29.0, ALT 30. Medications: metformin. History: none.",
+    "expected_verdict": "review",
+    "expected_clause_ids": ["TRIAL01-EXC-03"],
+    "note": "BORDERLINE: eGFR missing, renal exclusion cannot be evaluated -> coordinator review"
+  },
+  {
+    "case_id": "P010",
+    "raw_summary": "Patient P010: 63-year-old with type 2 diabetes mellitus. HbA1c 7.5%, BMI 40.2, eGFR 46, ALT 30. Medications: metformin. History: hypertension.",
+    "expected_verdict": "review",
+    "expected_clause_ids": ["TRIAL01-INC-04", "TRIAL01-EXC-03"],
+    "note": "BORDERLINE: BMI 40.2 at the 40 edge and eGFR 46 at the 45 edge -> coordinator review"
+  }
+]
