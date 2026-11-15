@@ -3,9 +3,10 @@
 Coordinates the full pipeline in the agreed fan-out / fan-in architecture:
 
     A1  Patient Intake Agent         (structures raw text)
-      └─► B2  Criteria Retrieval         ─┐  fan-out
-      └─► B4  Exclusion Checker          ─┘
-    A2  Eligibility Manager          fan-in: applies inclusion rules, issues verdict
+    B2  Criteria Retrieval           (RAG; both branches need its clauses)
+      └─► B4  Exclusion Checker          ─┐  fan-out (run concurrently)
+      └─► A2  Inclusion evaluation       ─┘
+    A2  Eligibility Manager          fan-in: merges both branches, issues verdict
     B5  Evidence Auditor Gate        (A4): on fail → downgrade to review
     A6  Final output                 verdict + matched/failed criteria + clause_ids
     A7  Human-in-the-loop            (called if verdict == "review")
@@ -27,8 +28,13 @@ for _p in (_HERE, _PARTB):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+from concurrent.futures import ThreadPoolExecutor
+
 from part_a_agents.patient_intake_agent    import run as intake_run   # A1
-from part_a_agents.eligibility_manager_agent import run as manager_run # A2
+from part_a_agents.eligibility_manager_agent import (                  # A2
+    evaluate_inclusions,
+    decide,
+)
 
 # ── import Part B agents ───────────────────────────────────────────────────
 from agents import (                                                    # type: ignore[import]
@@ -47,18 +53,26 @@ from human_loop import route_to_coordinator                            # A7
 # ══════════════════════════════════════════════════════════════════════════
 
 def _fan_out(rec: dict) -> dict:
-    """Run B2 and B4 sequentially (architecturally a fan-out — both branches
-    depend only on `structured`, not on each other's output).
+    """A3 fan-out / fan-in.
 
-    In a production async system these would be awaited concurrently:
-        results = await asyncio.gather(criteria_task, exclusion_task)
-    Here we run them sequentially and label each step in the status field
-    so the evaluator and demo can observe the fan-out semantics.
+    B2 retrieval runs first because both branches need `retrieved_criteria`.
+    The two independent branches then run concurrently:
+        branch 1 — B4 Exclusion Checker  -> exclusion_results[]
+        branch 2 — A2 inclusion rules    -> inclusion_results[]
+    Both branches only read the record, so they can share it safely; their
+    outputs are merged into the record at the fan-in point.
     """
-    # Branch 1 — Criteria Retrieval (RAG)
     rec = criteria_retrieval_agent.run(rec)       # fills retrieved_criteria[]
-    # Branch 2 — Exclusion Checker (needs retrieved_criteria from branch 1)
-    rec = exclusion_checker_agent.run(rec)        # fills exclusion_results[]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        exc_future = pool.submit(exclusion_checker_agent.check, rec)
+        inc_future = pool.submit(evaluate_inclusions, rec)
+        exclusion_results = exc_future.result()
+        inclusion_results = inc_future.result()
+
+    # fan-in: merge branch outputs into the shared record
+    rec["exclusion_results"] = exclusion_results
+    rec["inclusion_results"] = inclusion_results
     rec["status"] = "fanout_complete"
     return rec
 
@@ -106,11 +120,11 @@ def run_pipeline(
     # ── A1: Patient Intake ─────────────────────────────────────────────────
     rec = intake_run(rec)
 
-    # ── A3: Fan-out — B2 Criteria Retrieval + B4 Exclusion Checker ────────
+    # ── A3: B2 retrieval, then fan-out B4 exclusions ‖ A2 inclusions ─────
     rec = _fan_out(rec)
 
-    # ── A2: Eligibility Manager (fan-in) ──────────────────────────────────
-    rec = manager_run(rec)
+    # ── A2: Eligibility Manager (fan-in → verdict) ────────────────────────
+    rec = decide(rec)
 
     # ── A4: Evidence Auditor Gate ──────────────────────────────────────────
     rec = evidence_auditor_agent.run(rec)

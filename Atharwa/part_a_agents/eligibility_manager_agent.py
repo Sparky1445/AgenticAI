@@ -1,8 +1,9 @@
 """A2 - Eligibility Manager Agent.
 
-Fan-in agent.  Receives a case record after:
-  - B2 Criteria Retrieval (retrieved_criteria)
-  - B4 Exclusion Checker  (exclusion_results)
+Two roles in the pipeline:
+  - Fan-out branch: `evaluate_inclusions` checks every retrieved INCLUSION
+    clause with rule_tool.apply, concurrently with the B4 Exclusion Checker.
+  - Fan-in: `decide` merges inclusion_results + exclusion_results.
 
 Responsibilities:
   1. Evaluate every INCLUSION clause with rule_tool.apply (mirrors stub_manager).
@@ -37,7 +38,7 @@ except ImportError:
     rule_tool = None  # type: ignore
 
 
-def _apply_inclusion_rules(case_record: dict) -> list[dict]:
+def evaluate_inclusions(case_record: dict) -> list[dict]:
     """Apply rule_tool.apply to every retrieved inclusion clause that has a rule."""
     if rule_tool is None:
         raise RuntimeError("rule_tool not importable — ensure Part B is on sys.path")
@@ -88,7 +89,7 @@ def decide(case_record: dict) -> dict:
 
 def run(case_record: dict) -> dict:
     """A2 entry point.  Fills inclusion_results, verdict, clause_ids."""
-    case_record["inclusion_results"] = _apply_inclusion_rules(case_record)
+    case_record["inclusion_results"] = evaluate_inclusions(case_record)
     return decide(case_record)
 
 

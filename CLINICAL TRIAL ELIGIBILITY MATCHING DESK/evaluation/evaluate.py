@@ -35,7 +35,9 @@ def evaluate(patients_file: Path = ROOT / "data" / "patients.json") -> dict:
         n_verdict += verdict_ok
         n_clause += clause_ok
         n_audit += bool(rec["audit_result"]["passed"])
-        recall += len(rec["retrieved_criteria"]) / ALL_CLAUSES
+        # recall of the governing clauses (expected_clause_ids) actually retrieved
+        retrieved_ids = {c["clause_id"] for c in rec["retrieved_criteria"]}
+        recall += len(exp_c & retrieved_ids) / len(exp_c) if exp_c else 1.0
         rows.append({"case_id": p["case_id"], "expected": exp_v, "verdict": rec["verdict"],
                      "verdict_correct": verdict_ok, "expected_clauses": sorted(exp_c),
                      "cited_clauses": rec["clause_ids"], "clause_correct": clause_ok,

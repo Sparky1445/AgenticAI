@@ -5,6 +5,8 @@
   "clause_citation_rate": 1.0,
   "audit_pass_rate": 1.0,
   "mean_retrieval_recall": 1.0,
+  "mean_clauses_retrieved": 13.0,
+  "total_clauses": 13,
   "rows": [
     {
       "case_id": "P001",
@@ -27,6 +29,7 @@
       ],
       "clause_correct": true,
       "audit_passed": true,
+      "retrieval_recall": 1.0,
       "status": "audit_passed",
       "note": "clean eligible case",
       "coordinator_note": ""
@@ -44,6 +47,7 @@
       ],
       "clause_correct": true,
       "audit_passed": true,
+      "retrieval_recall": 1.0,
       "status": "audit_passed",
       "note": "banned medication (insulin)",
       "coordinator_note": ""
@@ -61,6 +65,7 @@
       ],
       "clause_correct": true,
       "audit_passed": true,
+      "retrieval_recall": 1.0,
       "status": "audit_passed",
       "note": "HbA1c > 9",
       "coordinator_note": ""
@@ -78,6 +83,7 @@
       ],
       "clause_correct": true,
       "audit_passed": true,
+      "retrieval_recall": 1.0,
       "status": "audit_passed",
       "note": "renal impairment eGFR < 45",
       "coordinator_note": ""
@@ -99,6 +105,7 @@
       ],
       "clause_correct": true,
       "audit_passed": true,
+      "retrieval_recall": 1.0,
       "status": "audit_passed",
       "note": "type 1 diabetes on insulin",
       "coordinator_note": ""
@@ -116,6 +123,7 @@
       ],
       "clause_correct": true,
       "audit_passed": true,
+      "retrieval_recall": 1.0,
       "status": "audit_passed",
       "note": "age > 75",
       "coordinator_note": ""
@@ -141,6 +149,7 @@
       ],
       "clause_correct": true,
       "audit_passed": true,
+      "retrieval_recall": 1.0,
       "status": "audit_passed",
       "note": "clean eligible case",
       "coordinator_note": ""
@@ -158,9 +167,10 @@
       ],
       "clause_correct": true,
       "audit_passed": true,
-      "status": "closed",
+      "retrieval_recall": 1.0,
+      "status": "review_queue",
       "note": "BORDERLINE: HbA1c 9.1 sits at the 9.0 exclusion edge -> coordinator review",
-      "coordinator_note": "[coordinator @ 2026-11-15 00:15] [AUTO-STUB] Case P008 routed for review. Borderline / uncertain clauses: TRIAL01-EXC-02. Awaiting clinical coordinator decision."
+      "coordinator_note": "[system @ 2026-11-15 12:01] Routed to coordinator review queue. Borderline / uncertain clauses: TRIAL01-EXC-02."
     },
     {
       "case_id": "P009",
@@ -175,9 +185,10 @@
       ],
       "clause_correct": true,
       "audit_passed": true,
-      "status": "closed",
+      "retrieval_recall": 1.0,
+      "status": "review_queue",
       "note": "BORDERLINE: eGFR missing, renal exclusion cannot be evaluated -> coordinator review",
-      "coordinator_note": "[coordinator @ 2026-11-15 00:15] [AUTO-STUB] Case P009 routed for review. Borderline / uncertain clauses: TRIAL01-EXC-03. Awaiting clinical coordinator decision."
+      "coordinator_note": "[system @ 2026-11-15 12:01] Routed to coordinator review queue. Borderline / uncertain clauses: TRIAL01-EXC-03."
     },
     {
       "case_id": "P010",
@@ -194,9 +205,10 @@
       ],
       "clause_correct": true,
       "audit_passed": true,
-      "status": "closed",
+      "retrieval_recall": 1.0,
+      "status": "review_queue",
       "note": "BORDERLINE: BMI 40.2 at the 40 edge and eGFR 46 at the 45 edge -> coordinator review",
-      "coordinator_note": "[coordinator @ 2026-11-15 00:15] [AUTO-STUB] Case P010 routed for review. Borderline / uncertain clauses: TRIAL01-INC-04, TRIAL01-EXC-03. Awaiting clinical coordinator decision."
+      "coordinator_note": "[system @ 2026-11-15 12:01] Routed to coordinator review queue. Borderline / uncertain clauses: TRIAL01-INC-04, TRIAL01-EXC-03."
     }
   ]
 }

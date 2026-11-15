@@ -18,8 +18,8 @@ Part A provides the **orchestrating brain**:
 
 | Task | File | Description |
 |------|------|-------------|
-| A1 | `agents/patient_intake_agent.py` | Structures raw text → age, diagnosis, labs, meds, conditions |
-| A2 | `agents/eligibility_manager_agent.py` | Fan-in: applies inclusion rules + issues verdict |
+| A1 | `part_a_agents/patient_intake_agent.py` | Structures raw text → age, diagnosis, labs, meds, conditions |
+| A2 | `part_a_agents/eligibility_manager_agent.py` | Inclusion-rule branch (fan-out) + verdict (fan-in) |
 | A3+A4+A6 | `orchestrator.py` | Fan-out/fan-in pipeline + auditor gate + final output |
 | A5 | `shared/case_record.py` (Part B) | Shared JSON store (reused, not duplicated) |
 | A7 | `human_loop.py` | Human-in-the-loop: routes review cases to trial coordinator |
@@ -37,17 +37,19 @@ Raw Summary
     ▼
 [A1] Patient Intake Agent  → structured {age, diagnosis, labs, medications, conditions}
     │
-    ├──────────────────── Fan-out (A3) ────────────────────
-    │                                                      │
-    ▼                                                      ▼
-[B2] Criteria Retrieval Agent              [B4] Exclusion Checker Agent
-  (RAG → retrieved_criteria[])               (rule_tool → exclusion_results[])
-    │                                                      │
-    └──────────────────── Fan-in (A3) ─────────────────────┘
+    ▼
+[B2] Criteria Retrieval Agent  (RAG → retrieved_criteria[]; both branches need it)
+    │
+    ├──────────── Fan-out (A3, concurrent threads) ────────────┐
+    ▼                                                          ▼
+[B4] Exclusion Checker Agent                 [A2] Inclusion evaluation
+  (rule_tool → exclusion_results[])            (rule_tool → inclusion_results[])
+    │                                                          │
+    └──────────────────── Fan-in (A3) ─────────────────────────┘
                                │
                                ▼
-               [A2] Eligibility Manager Agent
-                 (inclusion rules → verdict proposal)
+               [A2] Eligibility Manager decide()
+                 (merge results → verdict proposal)
                                │
                                ▼
                [B5] Evidence Auditor Gate (A4)
@@ -98,8 +100,12 @@ python human_loop.py P008
 The `human_loop.py` module implements the **human-in-the-loop path**:
 - Borderline / review cases are formatted into a detailed referral for the trial coordinator
 - Coordinator's note is written back into the shared case record (`coordinator_note` field)
-- Coordinator can override the verdict (ELIGIBLE / INELIGIBLE) or confirm review
-- Case is then closed (`status = "closed"`)
+- The note must **start** with a decision token: `ELIGIBLE`, `INELIGIBLE` or `CONFIRM REVIEW`
+  (optionally in brackets). Only that leading token can override the verdict, so free text
+  like "not eligible because…" never flips a verdict by accident.
+- A case is closed (`status = "closed"`) only when a coordinator actually enters a note.
+  In automated runs (evaluation, demo without a note) review cases stay in
+  `status = "review_queue"` until `python main.py loop <case_id>` is used.
 
 Borderline cases: **P008** (HbA1c 9.1 at edge), **P009** (eGFR missing), **P010** (BMI + eGFR both at edge)
 
@@ -111,7 +117,12 @@ Borderline cases: **P008** (HbA1c 9.1 at edge), **P009** (eGFR missing), **P010*
 Verdict accuracy      : 100%  (10 cases)
 Correct clause cited  : 100%
 Audit pass rate       : 100%
-Mean retrieval recall : 100%
+Mean retrieval recall : 100%  (governing clauses retrieved)
+Clauses retrieved     : 13.0 / 13 per case
 ```
+
+Retrieval recall is the share of each case's governing clauses (`expected_clause_ids`)
+that B2 retrieved. `python main.py` and `python evaluate_partA.py` share the same
+`evaluate()` function and write an identical results file.
 
 Results written to `Atharwa/results_partA.json`.

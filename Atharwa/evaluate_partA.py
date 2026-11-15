@@ -26,8 +26,7 @@ for _p in (_HERE, _PARTB):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from orchestrator import run_pipeline          # A3/A4/A6
-from shared.case_record import save_case       # type: ignore[import]
+from orchestrator import run_pipeline          # A3/A4/A6 (saves each case record)
 
 PATIENTS_FILE = _PARTB / "data" / "patients.json"
 STORE_DIR     = _PARTB / "data" / "case_store"
@@ -36,8 +35,15 @@ ALL_CLAUSES   = 13   # 5 inclusion + 8 exclusion in data/protocols
 
 
 def evaluate(patients_file: Path = PATIENTS_FILE) -> dict:
+    """Run every patient and compute the metrics.
+
+    Retrieval recall = share of each case's *governing* clauses
+    (expected_clause_ids) that B2 actually retrieved — it measures whether
+    retrieval surfaced the clauses that decide the case, not just how many
+    clauses came back. `mean_clauses_retrieved` reports volume separately.
+    """
     patients = json.loads(patients_file.read_text(encoding="utf-8"))
-    rows, n_verdict, n_clause, n_audit, recall = [], 0, 0, 0, 0.0
+    rows, n_verdict, n_clause, n_audit, recall, n_retrieved = [], 0, 0, 0, 0.0, 0
 
     for p in patients:
         rec = run_pipeline(
@@ -55,7 +61,10 @@ def evaluate(patients_file: Path = PATIENTS_FILE) -> dict:
         n_verdict += verdict_ok
         n_clause  += clause_ok
         n_audit   += audit_ok
-        recall    += len(rec.get("retrieved_criteria") or []) / ALL_CLAUSES
+        retrieved_ids = {c["clause_id"] for c in rec.get("retrieved_criteria") or []}
+        case_recall   = len(exp_c & retrieved_ids) / len(exp_c) if exp_c else 1.0
+        recall       += case_recall
+        n_retrieved  += len(retrieved_ids)
 
         rows.append({
             "case_id":          p["case_id"],
@@ -66,6 +75,7 @@ def evaluate(patients_file: Path = PATIENTS_FILE) -> dict:
             "cited_clauses":    rec.get("clause_ids") or [],
             "clause_correct":   clause_ok,
             "audit_passed":     audit_ok,
+            "retrieval_recall": case_recall,
             "status":           rec.get("status"),
             "note":             p.get("note", ""),
             "coordinator_note": rec.get("coordinator_note") or "",
@@ -79,6 +89,8 @@ def evaluate(patients_file: Path = PATIENTS_FILE) -> dict:
         "clause_citation_rate":  n_clause  / n,
         "audit_pass_rate":       n_audit   / n,
         "mean_retrieval_recall": recall    / n,
+        "mean_clauses_retrieved": n_retrieved / n,
+        "total_clauses":         ALL_CLAUSES,
         "rows":                  rows,
     }
     RESULTS_FILE.write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -105,7 +117,8 @@ def main() -> None:
     print(f"Verdict accuracy      : {s['verdict_accuracy']:.0%}  ({s['cases']} cases)")
     print(f"Correct clause cited  : {s['clause_citation_rate']:.0%}")
     print(f"Audit pass rate       : {s['audit_pass_rate']:.0%}")
-    print(f"Mean retrieval recall : {s['mean_retrieval_recall']:.0%}")
+    print(f"Mean retrieval recall : {s['mean_retrieval_recall']:.0%}  (governing clauses retrieved)")
+    print(f"Clauses retrieved     : {s['mean_clauses_retrieved']:.1f} / {s['total_clauses']} per case")
     print(f"\nResults written to → {RESULTS_FILE.relative_to(_HERE.parent)}")
 
 

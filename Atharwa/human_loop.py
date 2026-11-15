@@ -8,7 +8,8 @@ When the Evidence Auditor (B5) or the Eligibility Manager (A2) produces a
   2. Accepts the coordinator's note (from stdin in interactive mode, or
      from a passed string in automated / test mode).
   3. Writes the note back into the shared case record and sets
-     status = "closed".
+     status = "closed". With no coordinator input the case is left in
+     status = "review_queue" instead (no human decision is invented).
 
 The completed record is then saved to the shared JSON store (A5).
 
@@ -21,6 +22,7 @@ Interactive CLI:
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -111,14 +113,27 @@ def _build_referral(rec: dict) -> str:
     return "\n".join(lines)
 
 
+_DECISION_RE = re.compile(
+    r"^\s*\[?\s*(ELIGIBLE|INELIGIBLE|CONFIRM\s+REVIEW)\s*\]?(?![\w-])", re.I
+)
+
+
 def _parse_coordinator_verdict(note: str) -> str | None:
-    """Try to extract an explicit verdict override from the coordinator's note."""
-    note_upper = note.upper()
-    if "ELIGIBLE" in note_upper and "INELIGIBLE" not in note_upper:
+    """Extract an explicit verdict override from the coordinator's note.
+
+    Only the leading decision token counts (documented format:
+    "[ELIGIBLE|INELIGIBLE|CONFIRM REVIEW] — reasoning"), so free text such as
+    "not eligible because ..." can never be misread as an override.
+    """
+    m = _DECISION_RE.match(note)
+    if not m:
+        return None   # no explicit decision → keep "review"
+    token = m.group(1).upper()
+    if token == "ELIGIBLE":
         return "eligible"
-    if "INELIGIBLE" in note_upper:
+    if token == "INELIGIBLE":
         return "ineligible"
-    return None   # keep "review" if coordinator doesn't override
+    return None       # CONFIRM REVIEW → keep "review"
 
 
 # ─────────────────────────── main entry point ─────────────────────────────
@@ -134,39 +149,45 @@ def route_to_coordinator(
         case_record:      The shared case record (must have verdict=="review").
         coordinator_note: Pre-supplied coordinator note (for automated runs).
                           If None and interactive=True, prompts stdin.
-                          If None and interactive=False, uses a default stub note.
+                          If None and interactive=False, the case is queued
+                          (status="review_queue") and left open — no human
+                          decision is fabricated.
         interactive:      If True, print the referral and read note from stdin.
 
     Returns:
-        Updated case record with coordinator_note set and status="closed".
+        Updated case record. status="closed" only when a real coordinator
+        note was supplied; otherwise status="review_queue".
     """
     if case_record.get("verdict") != "review":
         # Nothing to do — not a review case
         return case_record
 
-    referral = _build_referral(case_record)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    existing  = case_record.get("coordinator_note") or ""
+    separator = "\n" if existing else ""
 
+    note: str | None = None
     if interactive:
-        print(referral)
+        print(_build_referral(case_record))
         try:
-            note = input("Coordinator note: ").strip()
+            note = input("Coordinator note: ").strip() or None
         except (EOFError, KeyboardInterrupt):
-            note = "No coordinator input received."
+            note = None
     elif coordinator_note is not None:
-        note = coordinator_note
-    else:
-        # Automated stub — generate a default note based on clause IDs
+        note = coordinator_note.strip() or None
+
+    if note is None:
+        # No human decision available — queue the case, do NOT close it.
         clause_list = ", ".join(case_record.get("clause_ids") or [])
-        note = (
-            f"[AUTO-STUB] Case {case_record['case_id']} routed for review. "
-            f"Borderline / uncertain clauses: {clause_list}. "
-            f"Awaiting clinical coordinator decision."
+        case_record["coordinator_note"] = (
+            existing + separator +
+            f"[system @ {timestamp}] Routed to coordinator review queue. "
+            f"Borderline / uncertain clauses: {clause_list}."
         )
+        case_record["status"] = "review_queue"
+        return case_record
 
     # Write the coordinator note back into the shared record
-    existing = case_record.get("coordinator_note") or ""
-    separator = "\n" if existing else ""
-    timestamp  = datetime.now().strftime("%Y-%m-%d %H:%M")
     case_record["coordinator_note"] = (
         existing + separator +
         f"[coordinator @ {timestamp}] {note}"
@@ -192,12 +213,16 @@ def main(case_id: str, store_dir: Path = _REVIEW_STORE) -> None:
         print(f"Case '{case_id}' not found in {store_dir}.")
         sys.exit(1)
 
-    if rec.get("verdict") != "review":
-        print(f"Case '{case_id}' has verdict='{rec['verdict']}' — not in review queue.")
+    if rec.get("verdict") != "review" or rec.get("status") != "review_queue":
+        print(f"Case '{case_id}' has verdict='{rec['verdict']}', "
+              f"status='{rec.get('status')}' — not in review queue.")
         sys.exit(0)
 
     rec = route_to_coordinator(rec, interactive=True)
     save_case(rec, store_dir)
+    if rec["status"] != "closed":
+        print(f"\nNo decision entered — case {case_id} stays in the review queue.")
+        return
     print(f"\n✓ Case {case_id} closed. Status: {rec['status']}")
     print(f"  Final verdict   : {rec['verdict']}")
     print(f"  Coordinator note: {rec['coordinator_note']}")

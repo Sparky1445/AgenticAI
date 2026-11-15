@@ -33,15 +33,14 @@ for _p in (PARTA, PARTB):
         sys.path.insert(0, str(_p))
 
 # ── Part A imports ────────────────────────────────────────────────────────
-from orchestrator import run_pipeline, extract_output   # A3/A4/A6
-from human_loop   import route_to_coordinator, main as loop_main  # A7
-from shared.case_record import save_case                           # A5
+from orchestrator   import run_pipeline, extract_output   # A3/A4/A6
+from human_loop     import route_to_coordinator            # A7
+from evaluate_partA import evaluate                        # A8
+from shared.case_record import save_case                   # A5
 
 # ── data paths ────────────────────────────────────────────────────────────
 PATIENTS_FILE = PARTB / "data" / "patients.json"
 STORE_DIR     = PARTB / "data" / "case_store"
-RESULTS_FILE  = PARTA / "results_partA.json"
-ALL_CLAUSES   = 13
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -49,49 +48,18 @@ ALL_CLAUSES   = 13
 # ══════════════════════════════════════════════════════════════════════════
 
 def run_evaluation() -> None:
-    """Run all 10 patients and print a full accuracy report."""
-    patients = json.loads(PATIENTS_FILE.read_text(encoding="utf-8"))
-    rows, n_verdict, n_clause, n_audit, recall = [], 0, 0, 0, 0.0
+    """Run all 10 patients and print a full accuracy report.
 
+    Uses evaluate_partA.evaluate() so both entry points produce the
+    identical results_partA.json.
+    """
     print(f"\n{'=' * 72}")
     print("  CLINICAL TRIAL ELIGIBILITY MATCHING DESK — Full Evaluation")
     print(f"{'=' * 72}")
-    print(f"  Running {len(patients)} patients through the complete pipeline ...\n")
+    print("  Running all patients through the complete pipeline ...\n")
 
-    for p in patients:
-        rec = run_pipeline(p["case_id"], p["raw_summary"], store_dir=STORE_DIR)
-        exp_v = p["expected_verdict"]
-        exp_c = set(p["expected_clause_ids"])
-        verdict_ok = rec["verdict"] == exp_v
-        clause_ok  = exp_c.issubset(set(rec.get("clause_ids") or []))
-        audit_ok   = bool((rec.get("audit_result") or {}).get("passed"))
-        n_verdict += verdict_ok
-        n_clause  += clause_ok
-        n_audit   += audit_ok
-        recall    += len(rec.get("retrieved_criteria") or []) / ALL_CLAUSES
-        rows.append({
-            "case_id":         p["case_id"],
-            "expected":        exp_v,
-            "verdict":         rec["verdict"],
-            "verdict_correct": verdict_ok,
-            "expected_clauses":sorted(exp_c),
-            "cited_clauses":   rec.get("clause_ids") or [],
-            "clause_correct":  clause_ok,
-            "audit_passed":    audit_ok,
-            "status":          rec.get("status"),
-            "note":            p.get("note", ""),
-        })
-
-    n = len(patients)
-    summary = {
-        "cases": n,
-        "verdict_accuracy":      n_verdict / n,
-        "clause_citation_rate":  n_clause  / n,
-        "audit_pass_rate":       n_audit   / n,
-        "mean_retrieval_recall": recall    / n,
-        "rows": rows,
-    }
-    RESULTS_FILE.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    summary = evaluate(PATIENTS_FILE)
+    rows, n = summary["rows"], summary["cases"]
 
     # ── print table ───────────────────────────────────────────────────────
     print(f"{'CASE':6} {'EXPECTED':12} {'VERDICT':12} {'V':3} {'C':3} {'AUDIT':7} CITED CLAUSES")
@@ -107,7 +75,8 @@ def run_evaluation() -> None:
     print(f"  Verdict accuracy      : {summary['verdict_accuracy']:.0%}  ({n} cases)")
     print(f"  Correct clause cited  : {summary['clause_citation_rate']:.0%}")
     print(f"  Audit pass rate       : {summary['audit_pass_rate']:.0%}")
-    print(f"  Mean retrieval recall : {summary['mean_retrieval_recall']:.0%}")
+    print(f"  Mean retrieval recall : {summary['mean_retrieval_recall']:.0%}  (governing clauses retrieved)")
+    print(f"  Clauses retrieved     : {summary['mean_clauses_retrieved']:.1f} / {summary['total_clauses']} per case")
     print(f"\n  Results saved → Atharwa/results_partA.json")
     print(f"  Case records  → CLINICAL TRIAL ELIGIBILITY MATCHING DESK/data/case_store/")
 
@@ -181,6 +150,9 @@ def run_loop(case_id: str) -> None:
     # Interactive coordinator session
     rec = route_to_coordinator(rec, interactive=True)
     save_case(rec, STORE_DIR)
+    if rec["status"] != "closed":
+        print(f"\nNo decision entered — case {case_id} stays in the review queue.")
+        return
     print(f"\n✓ Case {case_id} closed.")
     print(f"  Final verdict   : {rec['verdict']}")
     print(f"  Status          : {rec['status']}")

@@ -1,4 +1,19 @@
 @echo off
+setlocal EnableDelayedExpansion
+cd /d "%~dp0"
+
+rem ── locate a Python interpreter (PATH first, then the py launcher) ──────
+set "PY="
+where python >nul 2>nul && set "PY=python"
+if not defined PY (
+    where py >nul 2>nul && set "PY=py -3"
+)
+if not defined PY (
+    echo Python was not found on PATH. Install Python 3.10+ and try again.
+    pause
+    exit /b 1
+)
+
 echo ============================================================
 echo  Clinical Trial Eligibility Matching Desk
 echo  CA2 Q1 - Group 1
@@ -13,14 +28,14 @@ echo.
 set /p choice="Enter choice (1-4): "
 
 if "%choice%"=="1" (
-    C:\msys64\ucrt64\bin\python3.12.exe main.py
+    %PY% main.py
 ) else if "%choice%"=="2" (
-    C:\msys64\ucrt64\bin\python3.12.exe main.py demo P008
+    %PY% main.py demo P008
 ) else if "%choice%"=="3" (
     set /p caseid="Enter case ID (P001-P010): "
-    C:\msys64\ucrt64\bin\python3.12.exe main.py case %caseid%
+    %PY% main.py case !caseid!
 ) else if "%choice%"=="4" (
-    C:\msys64\ucrt64\bin\python3.12.exe main.py loop P008
+    %PY% main.py loop P008
 ) else (
     echo Invalid choice.
 )
