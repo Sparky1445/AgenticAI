@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clinical Trial Eligibility Matching Desk</title>
+<meta name="description" content="Multi-agent clinical trial eligibility matching — CSE476 CA2 demo (synthetic data).">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230B6E6E'/%3E%3Cpath d='M9 4h6M10 4v5l-5 9a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 18l-5-9V4' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3"/><path d="M7.5 15h9"/></svg>
+    </div>
+    <div>
+      <div class="brand-name">Eligibility Matching Desk</div>
+      <div class="brand-sub">TRIAL01 · Phase 3 oral add-on for T2DM · Semantic Kernel multi-agent</div>
+    </div>
+  </div>
+  <nav aria-label="Screens" class="nav">
+    <a href="#/pipeline" data-route="pipeline">Live pipeline</a>
+    <a href="#/review" data-route="review">Coordinator review <span class="badge" id="reviewCount">3</span></a>
+    <a href="#/evaluation" data-route="evaluation">Evaluation</a>
+    <a href="#/about" data-route="about">Architecture</a>
+  </nav>
+</header>
+
+<main id="app" tabindex="-1"></main>
+
+<footer class="foot">
+  CSE476 · CA2 · Group 1 · Part A: Atharwa Dewasthali · Part B: partner ·
+  <strong>Academic demonstration only. All patients are synthetic. Not medical advice.</strong>
+</footer>
+
+<script src="data.js"></script>
+<script src="agents.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
