@@ -44,7 +44,7 @@ Do NOT decide eligibility. Return ONLY JSON in exactly this shape:
     if (s.provider === "gemini") {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(s.apiKey)}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0, responseMimeType: "application/json" } })
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: Object.assign({ temperature: 0, responseMimeType: "application/json" }, /flash/i.test(m) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) })
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error?.message || r.status);

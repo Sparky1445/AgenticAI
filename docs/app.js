@@ -393,21 +393,17 @@
 
   async function withLLM(entry) {
     delete entry.llm; delete entry.llmError; delete entry.guidance;
-    try {
-      const clauses = D.protocols.map((p) => ({ clause_id: p.clause_id, type: p.type, title: p.title, text: p.text }));
-      entry.llm = await L.augment(entry.raw, clauses);
-    } catch (err) {
-      entry.llmError = "LLM call failed: " + (err && err.message ? err.message : err);
-    }
-    try {                                    // A9: guidance from the FINAL rule-based verdict
-      const m = A.runAllTrials(entry.id, entry.raw, entry.llm);
-      const briefs = {};
-      Object.entries(m.trials).forEach(([tid, t]) => (briefs[tid] = { verdict: t.rec.verdict, clause_ids: t.rec.clause_ids,
-        flagged: t.rec.inclusion_results.concat(t.rec.exclusion_results).filter((r) => r.outcome !== "pass").map((r) => ({ clause_id: r.clause_id, title: r.title, outcome: r.outcome, reason: r.reason })) }));
-      entry.guidance = await L.guide(m.trials.TRIAL01.rec, briefs);
-    } catch (err) {
-      entry.guidance = { error: String(err && err.message ? err.message : err) };
-    }
+    // Every trial clause is always evaluated by the rule tool, so the verdicts do not depend on the LLM.
+    // That lets the two LLM calls (B2 hybrid retrieval and A9 guidance) run IN PARALLEL instead of one after the other.
+    const m = A.runAllTrials(entry.id, entry.raw, null);
+    const briefs = {};
+    Object.entries(m.trials).forEach(([tid, t]) => (briefs[tid] = { verdict: t.rec.verdict, clause_ids: t.rec.clause_ids,
+      flagged: t.rec.inclusion_results.concat(t.rec.exclusion_results).filter((r) => r.outcome !== "pass").map((r) => ({ clause_id: r.clause_id, title: r.title, outcome: r.outcome, reason: r.reason })) }));
+    const clauses = D.protocols.map((p) => ({ clause_id: p.clause_id, type: p.type, title: p.title, text: p.text }));
+    const [aug, gd] = await Promise.allSettled([L.augment(entry.raw, clauses), L.guide(m.trials.TRIAL01.rec, briefs)]);
+    if (aug.status === "fulfilled") entry.llm = aug.value;
+    else entry.llmError = "LLM call failed: " + (aug.reason && aug.reason.message ? aug.reason.message : aug.reason);
+    entry.guidance = gd.status === "fulfilled" ? gd.value : { error: String(gd.reason && gd.reason.message ? gd.reason.message : gd.reason) };
   }
 
   function initLLMControls() {

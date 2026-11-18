@@ -104,13 +104,21 @@ def build_ai_kernel(cfg: dict | None = None):
 
 # ─────────────────────────── 1. plain completion (used by LLM mode) ─────────
 
+def _fast(cfg: dict) -> dict:
+    """Gemini 2.5 Flash 'thinks' before answering by default, which makes every call slow.
+    Our prompts don't need it, so switch thinking off."""
+    if cfg.get("provider") == "gemini" and "flash" in (cfg.get("model") or ""):
+        return {"extra_body": {"reasoning_effort": "none"}}
+    return {}
+
+
 async def _complete(prompt: str, cfg: dict) -> str:
     kernel = Kernel()
     kernel.add_service(make_chat_service(cfg))
     chat = kernel.get_service(SERVICE_ID)
     history = ChatHistory()
     history.add_user_message(prompt)
-    settings = OpenAIChatPromptExecutionSettings(service_id=SERVICE_ID, temperature=0, max_tokens=1500)
+    settings = OpenAIChatPromptExecutionSettings(service_id=SERVICE_ID, temperature=0, max_tokens=1500, **_fast(cfg))
     result = await chat.get_chat_message_content(history, settings, kernel=kernel)
     return str(result)
 
@@ -142,6 +150,13 @@ class EligibilityDeskTools:
         out.update(flagged_clauses=flagged, audit_passed=rec["audit_result"]["passed"])
         return json.dumps(out)
 
+    @kernel_function(name="get_patient", description="Get one synthetic patient's summary by ID, e.g. P004.")
+    def get_patient(self, case_id: Annotated[str, "Patient ID such as P004"]) -> str:
+        for p in json.loads(PATIENTS_FILE.read_text(encoding="utf-8")):
+            if p["case_id"].upper() == case_id.strip().upper():
+                return p["raw_summary"]
+        return f"No patient {case_id}"
+
     @kernel_function(name="list_patients", description="List the synthetic patients in the database with their summaries.")
     def list_patients(self) -> str:
         pats = json.loads(PATIENTS_FILE.read_text(encoding="utf-8"))
@@ -157,7 +172,8 @@ SYSTEM_PROMPT = """You are the assistant of a clinical-trial eligibility desk fo
 (phase 3 oral add-on therapy for type 2 diabetes on metformin).
 Rules:
 - To judge any patient you MUST call desk-check_patient. Never decide eligibility yourself.
-- For a known patient ID, first call desk-list_patients to get the summary, then desk-check_patient.
+- For a known patient ID, call desk-get_patient to get the summary, then desk-check_patient
+  (call both in the same turn when you can). Only use desk-list_patients when asked to list patients.
 - Report the verdict exactly as returned, explain it in plain language, and cite the clause IDs.
 - If the verdict is "review", say that a trial coordinator must decide and why.
 - Academic demo with synthetic data; not medical advice."""
@@ -170,7 +186,7 @@ async def _ask(question: str, cfg: dict) -> dict:
     history.add_system_message(SYSTEM_PROMPT)
     history.add_user_message(question)
     settings = OpenAIChatPromptExecutionSettings(
-        service_id=SERVICE_ID, temperature=0,
+        service_id=SERVICE_ID, temperature=0, **_fast(cfg),
         function_choice_behavior=FunctionChoiceBehavior.Auto(filters={"included_plugins": ["desk"]}))
     answer = await chat.get_chat_message_content(history, settings, kernel=kernel)
     calls = [f"{item.plugin_name}.{item.function_name}({item.arguments})"
