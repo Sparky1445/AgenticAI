@@ -25,6 +25,10 @@
     token: "ELIGIBLE",
     draft: {}
   };
+  // give duplicate custom IDs a suffix (e.g. two "P011" → P011, P011-2) so each can be picked / deleted
+  (() => { const seen = new Set(S.cases.map((x) => x.id)); let changed = false;
+    S.custom.forEach((x) => { let id = x.id, n = 2; while (seen.has(id)) { id = x.id + "-" + n++; changed = true; } x.id = id; seen.add(id); });
+    if (changed) store.set("custom", S.custom); })();
   const allCases = () => S.cases.concat(S.custom);
   const cache = {};
   /* ───────── Python + Semantic Kernel backend (server.py), when running ───────── */
@@ -134,9 +138,10 @@
       const r = result(x).rec, v = finalVerdict(x);
       const nElig = TRIALS.filter((t) => finalVerdict(x, t.id) === "eligible").length;
       const sub = r.structured.age != null ? `${r.structured.age} y · HbA1c ${r.structured.labs.hba1c ?? "?"}${r.structured.labs.egfr == null ? " · eGFR ?" : ""}` : "unparsed";
-      return `<button class="qitem" data-pick="${esc(x.id)}" aria-current="${x.id === c.id}">
+      const del = S.custom.includes(x) ? `<button class="qdel" data-del="${esc(x.id)}" title="Delete ${esc(x.id)}" aria-label="Delete patient ${esc(x.id)}">×</button>` : "";
+      return `<div class="qrow"><button class="qitem" data-pick="${esc(x.id)}" aria-current="${x.id === c.id}">
         <span><span class="qid">${esc(x.id)}</span><br><span class="qsub">${esc(sub)}</span><br><span class="qsub" style="color:${nElig ? "var(--teal-dark)" : "var(--muted)"};font-weight:600">${nElig ? `eligible for ${nElig} of ${TRIALS.length} trials` : `no trial match`}</span></span>
-        <span class="chip ${v}" title="${esc(S.trial)}">${closedOf(x) ? "✓ " : ""}${v}</span></button>`;
+        <span class="chip ${v}" title="${esc(S.trial)}">${closedOf(x) ? "✓ " : ""}${v}</span></button>${del}</div>`;
     }).join("");
 
     // OUTER fan-out view: one tile per trial
@@ -234,6 +239,7 @@
               <button class="btn primary" id="runBtn" ${S.timer ? "disabled" : ""}><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M7 4v16l13-8z"/></svg>${S.timer ? "Running…" : "Run agents"}</button>
               <button class="btn" id="stepBtn">Step</button>
               <button class="btn" id="resetBtn">Reset</button>
+              ${isCustom ? `<button class="btn danger" data-del="${esc(c.id)}">Delete patient</button>` : ""}
               <label class="btn" style="font-weight:500">Speed
                 <select id="speed" style="border:none;background:transparent;font:inherit;font-weight:600;color:inherit">
                   ${[1200, 700, 350].map((v) => `<option value="${v}" ${S.speed === v ? "selected" : ""}>${v === 1200 ? "Slow" : v === 700 ? "Normal" : "Fast"}</option>`).join("")}
@@ -358,6 +364,17 @@
       store.set("custom", S.custom);
       runAnim();
     });
+    $app.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = b.dataset.del;
+      if (!confirmDelete(id)) return;
+      stopTimer();
+      TRIALS.forEach((t) => delete S.closed[ck({ id }, t.id)]);
+      S.custom = S.custom.filter((x) => x.id !== id);
+      store.set("custom", S.custom); store.set("closed", S.closed);
+      if (S.sel === id) { S.sel = "P008"; S.step = 6; }
+      renderPipeline(); updateBadge();
+    }));
     const cc = $app.querySelector("#clearCustom");
     if (cc) cc.addEventListener("click", () => { S.custom.forEach((x) => TRIALS.forEach((t) => delete S.closed[ck(x, t.id)])); S.custom = []; store.set("custom", []); store.set("closed", S.closed); S.sel = "P008"; renderPipeline(); updateBadge(); });
   }
@@ -531,6 +548,9 @@
     const ro = $app.querySelector("#reopen");
     if (ro) ro.addEventListener("click", () => { delete S.closed[K]; delete S.draft[K]; store.set("closed", S.closed); renderReview(); updateBadge(); });
     $app.querySelector("#back").addEventListener("click", () => { S.sel = c.id; S.trial = tid; S.step = 6; });
+  }
+  function confirmDelete(id) {
+    try { return window.confirm("Delete patient " + id + " from the list?"); } catch (e) { return true; }
   }
   function jsonPreview(id, verdict, status, note) {
     return `// data/case_store/${id}.json\n{\n  "verdict": "${verdict}",\n  "status": "${status}",\n  "coordinator_note": ${JSON.stringify(note)}\n}`;

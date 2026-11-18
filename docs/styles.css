@@ -252,3 +252,11 @@ dialog#llmDialog::backdrop{background:rgba(15,42,61,.55)}
 table.matrix{min-width:860px}
 table.matrix th,table.matrix td{text-align:center}
 table.matrix th:first-child,table.matrix td:first-child{text-align:left}
+
+/* delete custom patient */
+.qrow{display:flex;align-items:stretch;gap:6px}
+.qrow .qitem{flex:1 1 auto;min-width:0}
+.qdel{flex:0 0 34px;border-radius:10px;border:1px solid var(--line-soft);background:#fff;color:var(--red);font-size:20px;font-weight:600;line-height:1;cursor:pointer}
+.qdel:hover,.qdel:focus-visible{background:var(--red-tint);border-color:var(--red)}
+.btn.danger{color:var(--red);border-color:#E9B9B5}
+.btn.danger:hover{background:var(--red-tint)}
