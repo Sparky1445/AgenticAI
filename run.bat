@@ -24,8 +24,9 @@ echo   1. Full evaluation (all 10 patients)
 echo   2. Step-by-step demo (P008 - borderline case)
 echo   3. Single patient verdict
 echo   4. Interactive human-in-the-loop (P008)
+echo   5. Website + Semantic Kernel server (http://localhost:8000)
 echo.
-set /p choice="Enter choice (1-4): "
+set /p choice="Enter choice (1-5): "
 
 if "%choice%"=="1" (
     %PY% main.py
@@ -36,6 +37,9 @@ if "%choice%"=="1" (
     %PY% main.py case !caseid!
 ) else if "%choice%"=="4" (
     %PY% main.py loop P008
+) else if "%choice%"=="5" (
+    start "" http://localhost:8000
+    %PY% server.py
 ) else (
     echo Invalid choice.
 )

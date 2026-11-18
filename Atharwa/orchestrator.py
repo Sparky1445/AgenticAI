@@ -52,7 +52,7 @@ from human_loop import route_to_coordinator                            # A7
 # A3  Fan-out helpers
 # ══════════════════════════════════════════════════════════════════════════
 
-def _fan_out(rec: dict) -> dict:
+def _fan_out(rec: dict, use_llm: bool = False) -> dict:
     """A3 fan-out / fan-in.
 
     B2 retrieval runs first because both branches need `retrieved_criteria`.
@@ -63,6 +63,9 @@ def _fan_out(rec: dict) -> dict:
     outputs are merged into the record at the fan-in point.
     """
     rec = criteria_retrieval_agent.run(rec)       # fills retrieved_criteria[]
+    if use_llm:                                   # optional LLM mode: query expansion + re-rank
+        from llm_retrieval import augment_record  # never removes a clause; falls back on error
+        rec = augment_record(rec)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         exc_future = pool.submit(exclusion_checker_agent.check, rec)
@@ -101,6 +104,7 @@ def run_pipeline(
     raw_summary: str,
     store_dir: str | Path | None = None,
     coordinator_input: str | None = None,
+    use_llm: bool = False,
 ) -> dict:
     """Run one patient through the full A+B pipeline.
 
@@ -108,6 +112,9 @@ def run_pipeline(
         case_id:           Patient identifier (e.g. 'P001').
         raw_summary:       Free-text patient summary.
         store_dir:         Optional path to save the shared case record JSON.
+        use_llm:           Optional LLM mode — LLM query expansion + clause
+                           re-ranking after B2 (see llm_retrieval.py). Verdicts
+                           stay rule-based. Default False.
         coordinator_input: If provided, fed into the human-in-the-loop path
                            as the coordinator's note (useful for testing A7).
 
@@ -121,7 +128,7 @@ def run_pipeline(
     rec = intake_run(rec)
 
     # ── A3: B2 retrieval, then fan-out B4 exclusions ‖ A2 inclusions ─────
-    rec = _fan_out(rec)
+    rec = _fan_out(rec, use_llm=use_llm)
 
     # ── A2: Eligibility Manager (fan-in → verdict) ────────────────────────
     rec = decide(rec)
@@ -132,6 +139,11 @@ def run_pipeline(
     # ── A7: Human-in-the-loop ─────────────────────────────────────────────
     if rec["verdict"] == "review":
         rec = route_to_coordinator(rec, coordinator_note=coordinator_input)
+
+    # ── A9: optional LLM patient guidance (LLM mode only; never changes verdict)
+    if use_llm:
+        from llm_guidance import add_guidance
+        rec = add_guidance(rec)
 
     # ── A5: Save shared case record ───────────────────────────────────────
     if store_dir is not None:

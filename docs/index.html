@@ -26,18 +26,51 @@
     <a href="#/pipeline" data-route="pipeline">Live pipeline</a>
     <a href="#/review" data-route="review">Coordinator review <span class="badge" id="reviewCount">3</span></a>
     <a href="#/evaluation" data-route="evaluation">Evaluation</a>
+    <a href="#/agent" data-route="agent">Ask the agent</a>
     <a href="#/about" data-route="about">Architecture</a>
   </nav>
+  <div class="llmctl">
+    <span id="engine" class="engine" role="status"></span>
+    <button type="button" id="llmToggle" class="llmtoggle" aria-pressed="false"><span class="dot" aria-hidden="true"></span>LLM mode: <span class="state">Off</span></button>
+    <button type="button" id="llmSettings" class="llmgear" aria-label="LLM settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </div>
 </header>
+
+<dialog id="llmDialog" aria-labelledby="llmTitle">
+  <form id="llmForm" class="llmform">
+    <h2 id="llmTitle">LLM mode settings</h2>
+    <p class="hint">When on, every <strong>newly added patient</strong> gets LLM query expansion and clause re-ranking during retrieval (B2). The verdict itself always stays rule-based.</p>
+    <label for="llmProvider">Provider</label>
+    <select id="llmProvider" name="provider">
+      <option value="gemini">Google Gemini</option>
+      <option value="openai">OpenAI</option>
+      <option value="anthropic">Anthropic Claude</option>
+    </select>
+    <label for="llmModel">Model <span class="hint">(leave blank for the default)</span></label>
+    <input type="text" id="llmModel" name="model" autocomplete="off">
+    <label for="llmKey">API key</label>
+    <input type="password" id="llmKey" name="apiKey" autocomplete="off" placeholder="Paste your key">
+    <span class="hint">Stored only in this browser and sent only to the provider you pick. Never committed to GitHub.</span>
+    <label class="check"><input type="checkbox" name="enabled"> Turn LLM mode on</label>
+    <div id="llmErr" role="alert" class="hint" style="color:var(--red);font-weight:600"></div>
+    <div class="btns">
+      <button class="btn primary" type="submit">Save</button>
+      <button class="btn" type="button" id="llmCancel">Cancel</button>
+      <button class="btn" type="button" id="llmClear" style="margin-left:auto">Forget key</button>
+    </div>
+  </form>
+</dialog>
 
 <main id="app" tabindex="-1"></main>
 
 <footer class="foot">
-  CSE476 · CA2 · Group 1 · Part A: Atharwa Dewasthali · Part B: partner ·
+  CSE476 · CA2 · Group 1 ·
   <strong>Academic demonstration only. All patients are synthetic. Not medical advice.</strong>
 </footer>
 
 <script src="data.js"></script>
+<script src="data_trials.js"></script>
+<script src="llm.js"></script>
 <script src="agents.js"></script>
 <script src="app.js"></script>
 </body>

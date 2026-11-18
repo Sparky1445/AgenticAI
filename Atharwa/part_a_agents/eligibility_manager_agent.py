@@ -99,3 +99,15 @@ class EligibilityManagerPlugin:
     @kernel_function(name="run", description="Fan-in: apply inclusion rules and issue preliminary verdict (A2 Manager)")
     def run(self, case_record_json: str) -> str:
         return json.dumps(run(json.loads(case_record_json)))
+
+    @kernel_function(name="evaluate_inclusions",
+                     description="Fan-out branch: test every retrieved inclusion clause with the rule tool (A2)")
+    def evaluate_inclusions(self, case_record_json: str) -> str:
+        rec = json.loads(case_record_json)
+        rec["inclusion_results"] = evaluate_inclusions(rec)
+        return json.dumps(rec)
+
+    @kernel_function(name="decide",
+                     description="Fan-in: merge inclusion + exclusion results and propose the verdict (A2)")
+    def decide(self, case_record_json: str) -> str:
+        return json.dumps(decide(json.loads(case_record_json)))

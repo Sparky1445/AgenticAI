@@ -55,6 +55,10 @@ def build_full_kernel():
     kernel.add_plugin(PatientIntakePlugin(),      plugin_name="patient_intake")
     kernel.add_plugin(EligibilityManagerPlugin(), plugin_name="eligibility_manager")
     kernel.add_plugin(OrchestratorPlugin(),       plugin_name="orchestrator")
+    from llm_retrieval import LLMRetrievalPlugin   # optional LLM mode (needs LLM_API_KEY at call time)
+    kernel.add_plugin(LLMRetrievalPlugin(),       plugin_name="llm_retrieval")
+    from multi_trial import TrialMatchingPlugin    # outer fan-out: per-trial retrieval
+    kernel.add_plugin(TrialMatchingPlugin(),      plugin_name="trial_matching")
 
     # Part B (re-registered here for completeness in the unified kernel)
     kernel.add_plugin(criteria_retrieval_agent.CriteriaRetrievalPlugin(),

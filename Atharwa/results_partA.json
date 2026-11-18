@@ -170,7 +170,7 @@
       "retrieval_recall": 1.0,
       "status": "review_queue",
       "note": "BORDERLINE: HbA1c 9.1 sits at the 9.0 exclusion edge -> coordinator review",
-      "coordinator_note": "[system @ 2026-11-15 12:01] Routed to coordinator review queue. Borderline / uncertain clauses: TRIAL01-EXC-02."
+      "coordinator_note": "[system @ 2026-11-18 04:24] Routed to coordinator review queue. Borderline / uncertain clauses: TRIAL01-EXC-02."
     },
     {
       "case_id": "P009",
@@ -188,7 +188,7 @@
       "retrieval_recall": 1.0,
       "status": "review_queue",
       "note": "BORDERLINE: eGFR missing, renal exclusion cannot be evaluated -> coordinator review",
-      "coordinator_note": "[system @ 2026-11-15 12:01] Routed to coordinator review queue. Borderline / uncertain clauses: TRIAL01-EXC-03."
+      "coordinator_note": "[system @ 2026-11-18 04:24] Routed to coordinator review queue. Borderline / uncertain clauses: TRIAL01-EXC-03."
     },
     {
       "case_id": "P010",
@@ -208,7 +208,7 @@
       "retrieval_recall": 1.0,
       "status": "review_queue",
       "note": "BORDERLINE: BMI 40.2 at the 40 edge and eGFR 46 at the 45 edge -> coordinator review",
-      "coordinator_note": "[system @ 2026-11-15 12:01] Routed to coordinator review queue. Borderline / uncertain clauses: TRIAL01-INC-04, TRIAL01-EXC-03."
+      "coordinator_note": "[system @ 2026-11-18 04:24] Routed to coordinator review queue. Borderline / uncertain clauses: TRIAL01-INC-04, TRIAL01-EXC-03."
     }
   ]
 }

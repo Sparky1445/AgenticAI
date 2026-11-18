@@ -1,7 +1,8 @@
 /* JavaScript port of the CA2 agent pipeline so the site runs fully in the browser.
  * Each function mirrors a Python module in the repo:
  *   A1 intake        → Atharwa/part_a_agents/patient_intake_agent.py
- *   B2 retrieval     → agents/criteria_retrieval_agent.py   (TF-IDF cosine, simplified)
+ *   B2 retrieval     → agents/criteria_retrieval_agent.py   (TF-IDF cosine, simplified;
+ *                      optional LLM query expansion + re-rank via llm.js when LLM mode is on)
  *   B3 rule tool     → tools/rule_tool.py                   (exact port)
  *   B4 exclusions    → agents/exclusion_checker_agent.py
  *   A2 manager       → Atharwa/part_a_agents/eligibility_manager_agent.py (exact port)
@@ -44,17 +45,26 @@
 
   /* ───────── B2 Criteria Retrieval (TF-IDF cosine over clause docs) ───────── */
   const tok = (s) => (s.toLowerCase().match(/[a-z0-9.]+/g) || []);
-  const DOCS = D.protocols.map((c) => ({ c, toks: tok(c.title + " " + c.text + " " + c.type) }));
-  const DF = {};
-  DOCS.forEach((d) => new Set(d.toks).forEach((t) => (DF[t] = (DF[t] || 0) + 1)));
-  const idf = (t) => Math.log((1 + DOCS.length) / (1 + (DF[t] || 0))) + 1;
-  const vec = (toks) => { const v = {}; toks.forEach((t) => (v[t] = (v[t] || 0) + idf(t))); return v; };
+  const trialOf = (cid) => cid.split("-")[0];
+  const TRIAL_IDS = (D.trials || [{ id: "TRIAL01" }]).map((t) => t.id);
+  // one TF-IDF vector store PER TRIAL, so a trial branch can only retrieve its own clauses
+  function buildIndex(clauses) {
+    const docs = clauses.map((c) => ({ c, toks: tok(c.title + " " + c.text + " " + c.type) }));
+    const df = {};
+    docs.forEach((d) => new Set(d.toks).forEach((t) => (df[t] = (df[t] || 0) + 1)));
+    const idf = (t) => Math.log((1 + docs.length) / (1 + (df[t] || 0))) + 1;
+    const vec = (toks) => { const v = {}; toks.forEach((t) => (v[t] = (v[t] || 0) + idf(t))); return v; };
+    docs.forEach((d) => (d.v = vec(d.toks)));
+    return { docs, vec };
+  }
+  const INDEX = {};
+  TRIAL_IDS.forEach((tid) => (INDEX[tid] = buildIndex(D.protocols.filter((c) => trialOf(c.clause_id) === tid))));
   const cos = (a, b) => { let d = 0, na = 0, nb = 0; for (const k in a) { na += a[k] * a[k]; if (b[k]) d += a[k] * b[k]; } for (const k in b) nb += b[k] * b[k]; return na && nb ? d / Math.sqrt(na * nb) : 0; };
-  DOCS.forEach((d) => (d.v = vec(d.toks)));
 
-  function retrieve(s) {
+  function retrieve(s, llm, tid) {
+    const { docs: DOCS, vec } = INDEX[tid || "TRIAL01"];
     // one query per patient signal; each clause keeps its best score
-    const q = [
+    let q = [
       "age " + s.age + " years age limit adult older",
       "diagnosis " + s.diagnosis + " type diabetes",
       "hba1c glycated haemoglobin percent " + (s.labs.hba1c ?? ""),
@@ -64,11 +74,24 @@
       "medication " + s.medications.join(" ") + " insulin metformin glp-1",
       "history conditions " + (s.conditions.join(" ") || "none") + " pregnancy pancreatitis"
     ];
-    return DOCS.map((d) => {
+    // Optional LLM mode: the LLM's queries are ADDED to the TF-IDF queries (query expansion)
+    if (llm && llm.queries) q = q.concat(llm.queries.map((x) => "llm: " + x));
+    const out = DOCS.map((d) => {
       let best = 0, bq = "";
-      q.forEach((qq) => { const sc = cos(vec(tok(qq)), d.v); if (sc > best) { best = sc; bq = qq; } });
+      q.forEach((qq) => { const sc = cos(vec(tok(qq.replace(/^llm: /, ""))), d.v); if (sc > best) { best = sc; bq = qq; } });
       return Object.assign({}, d.c, { score: +best.toFixed(4), query: bq });
-    }).sort((a, b) => b.score - a.score);
+    });
+    if (!llm || !llm.ranking) return out.sort((a, b) => b.score - a.score);
+    // Hybrid re-rank: 50% TF-IDF (normalised) + 50% LLM relevance. No clause is ever dropped.
+    const max = Math.max(...out.map((c) => c.score)) || 1;
+    out.forEach((c) => {
+      const r = llm.ranking[c.clause_id];
+      c.tfidf_norm = +(c.score / max).toFixed(3);
+      c.llm_relevance = r ? r.relevance : null;
+      c.llm_reason = r ? r.reason : "";
+      c.hybrid_score = +(0.5 * c.tfidf_norm + 0.5 * (r ? r.relevance : 0)).toFixed(3); // unscored by LLM → 0 relevance (still kept)
+    });
+    return out.sort((a, b) => b.hybrid_score - a.hybrid_score);
   }
 
   /* ───────── B3 Rule tool (exact port) ───────── */
@@ -189,13 +212,14 @@
   }
 
   /* ───────── A3/A4/A6 orchestrator: returns the record + per-stage snapshots ───────── */
-  function runPipeline(caseId, raw) {
+  function runPipeline(caseId, raw, llm, tid) {
+    tid = tid || "TRIAL01";
     const rec = { case_id: caseId, raw_summary: raw, structured: null, retrieved_criteria: [], inclusion_results: [], exclusion_results: [], audit_result: null, verdict: null, matched_criteria: [], failed_criteria: [], clause_ids: [], status: "new", coordinator_note: "" };
     const t0 = performance.now();
     const timing = {};
     const tm = (k, fn) => { const s = performance.now(); const r = fn(); timing[k] = +(performance.now() - s).toFixed(2); return r; };
     tm("A1", () => { rec.structured = intake(raw); rec.status = "intake_done"; });
-    tm("B2", () => { rec.retrieved_criteria = retrieve(rec.structured); rec.status = "criteria_retrieved"; });
+    tm("B2", () => { rec.trial_id = tid; rec.retrieved_criteria = retrieve(rec.structured, llm, tid); rec.retrieval_mode = llm ? "hybrid (TF-IDF + LLM re-rank)" : "TF-IDF"; rec.status = "criteria_retrieved"; });
     tm("FAN", () => { rec.exclusion_results = branch(rec, "exclusion"); rec.inclusion_results = branch(rec, "inclusion"); });
     const parts = tm("A2", () => decide(rec));
     const proposed = rec.verdict;
@@ -205,5 +229,15 @@
     return { rec, parts, proposed, timing };
   }
 
-  window.CT_AGENTS = { intake, retrieve, apply, decide, audit, runPipeline, parseToken, applyCoordinatorNote };
+  /* ───────── outer fan-out: intake once, then every trial branch (each with its own inner fan-out) ───────── */
+  function runAllTrials(caseId, raw, llm) {
+    const t0 = performance.now();
+    const trials = {};
+    TRIAL_IDS.forEach((tid) => (trials[tid] = runPipeline(caseId, raw, llm, tid)));   // independent branches
+    const summary = { eligible: [], review: [], ineligible: [] };
+    TRIAL_IDS.forEach((tid) => summary[trials[tid].rec.verdict].push(tid));
+    return { case_id: caseId, structured: trials.TRIAL01.rec.structured, trials, summary, total_ms: +(performance.now() - t0).toFixed(2) };
+  }
+
+  window.CT_AGENTS = { intake, retrieve, apply, decide, audit, runPipeline, runAllTrials, parseToken, applyCoordinatorNote, TRIAL_IDS };
 })();
