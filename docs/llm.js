@@ -34,9 +34,11 @@ ${list}
 
 Tasks:
 1. Write 3 to 6 short search queries that capture this patient's eligibility-relevant facts (labs, drugs, diagnoses, history), using clinical synonyms where useful.
-2. For EVERY clause above, give a relevance score from 0 to 1 for deciding THIS patient's eligibility, and a reason of at most 15 words.
+2. For EVERY clause above, give a relevance score from 0 to 1 for deciding THIS patient's eligibility (put them in "scores").
+3. For ONLY the 6 most relevant clauses, add a reason of at most 8 words (put them in "reasons").
+Keep the output short: no extra text, no other fields.
 Do NOT decide eligibility. Return ONLY JSON in exactly this shape:
-{"queries": ["..."], "clauses": [{"id": "TRIAL01-INC-01", "relevance": 0.9, "reason": "..."}]}`;
+{"queries": ["..."], "scores": {"TRIAL01-INC-01": 0.9, "TRIAL01-EXC-02": 0.1}, "reasons": {"TRIAL01-INC-01": "HbA1c 8.2% within range"}}`;
   }
 
   async function call(s, prompt) {
@@ -78,7 +80,12 @@ Do NOT decide eligibility. Return ONLY JSON in exactly this shape:
     const j = JSON.parse(m[0]);
     const ids = new Set(clauses.map((c) => c.clause_id));
     const ranking = {};
-    (j.clauses || []).forEach((c) => {
+    const reasons = j.reasons || {};
+    Object.entries(j.scores || {}).forEach(([id, v]) => {           // compact format (fast)
+      const rel = Math.max(0, Math.min(1, Number(v)));
+      if (ids.has(id) && !isNaN(rel)) ranking[id] = { relevance: +rel.toFixed(2), reason: String(reasons[id] || "").slice(0, 140) };
+    });
+    (j.clauses || []).forEach((c) => {                              // older verbose format still accepted
       if (!ids.has(c.id)) return; // ignore invented clause IDs
       const rel = Math.max(0, Math.min(1, Number(c.relevance)));
       if (!isNaN(rel)) ranking[c.id] = { relevance: +rel.toFixed(2), reason: String(c.reason || "").slice(0, 140) };

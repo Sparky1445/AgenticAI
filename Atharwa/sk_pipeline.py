@@ -144,15 +144,24 @@ async def _run_all(case_id: str, raw: str, use_llm: bool, llm: dict | None) -> d
     common: list[dict] = []
     t_all = time.perf_counter()
     base = await _invoke(kernel, "patient_intake", "run", new_case(case_id, raw), common, "A1")   # A1 once
-    hints = None
-    if use_llm:                                                   # ONE LLM call for all trials
+    hints = guidance = None
+    if use_llm:
+        # Verdicts never depend on the LLM (every trial clause is always rule-checked), so the two LLM calls —
+        # B2 hybrid retrieval and A9 guidance — run IN PARALLEL instead of one after the other.
+        import llm_guidance
         import llm_retrieval
-        t0 = time.perf_counter()
+        pre = {tid: multi_trial.run_trial(base, tid, None) for tid in multi_trial.TRIAL_IDS}   # rule-only, a few ms
         clauses = [c for tid in multi_trial.TRIAL_IDS for c in multi_trial.trial_clauses(tid)]
-        hints = await asyncio.to_thread(llm_retrieval.get_hints, raw, clauses, **(llm or {}))
-        common.append({"step": "B2+", "call": "llm_retrieval.get_hints → kernel chat service (AI connector), all trials",
-                       "plugin": "llm_retrieval", "function": "get_hints",
-                       "ms": round((time.perf_counter() - t0) * 1000, 2), "branch": ""})
+        t0 = time.perf_counter()
+        hints, guidance = await asyncio.gather(
+            asyncio.to_thread(llm_retrieval.get_hints, raw, clauses, **(llm or {})),
+            asyncio.to_thread(llm_guidance.add_guidance, copy.deepcopy(pre["TRIAL01"]), **(llm or {}),
+                              trial_results={t: multi_trial.trial_brief(r) for t, r in pre.items()}))
+        ms = round((time.perf_counter() - t0) * 1000, 2)
+        common.append({"step": "B2+", "call": "llm_retrieval.get_hints → kernel chat service (AI connector), all trials ‖ A9",
+                       "plugin": "llm_retrieval", "function": "get_hints", "ms": ms, "branch": "llm"})
+        common.append({"step": "A9", "call": "llm_guidance → kernel chat service (AI connector) ‖ B2+ (parallel)",
+                       "plugin": "llm_guidance", "function": "run", "ms": ms, "branch": "llm"})
     traces = {tid: [] for tid in multi_trial.TRIAL_IDS}
     t0 = time.perf_counter()
     recs = await asyncio.gather(*[asyncio.to_thread(_trial_thread, kernel, base, tid, hints, traces[tid])
@@ -164,15 +173,8 @@ async def _run_all(case_id: str, raw: str, use_llm: bool, llm: dict | None) -> d
     out = {"case_id": case_id, "structured": base["structured"],
            "trials": {tid: {"rec": r, "proposed": r.get("proposed_verdict"), "trace": traces[tid]} for tid, r in trials.items()},
            "summary": multi_trial.summarize(trials), "common_trace": common}
-    if use_llm:                                                   # A9 once, across all trials
-        import llm_guidance
-        t0 = time.perf_counter()
-        g = await asyncio.to_thread(llm_guidance.add_guidance, copy.deepcopy(trials["TRIAL01"]), **(llm or {}),
-                                    trial_results={t: multi_trial.trial_brief(r) for t, r in trials.items()})
-        out["patient_guidance"] = g["patient_guidance"]
-        common.append({"step": "A9", "call": "llm_guidance → kernel chat service (AI connector)",
-                       "plugin": "llm_guidance", "function": "run",
-                       "ms": round((time.perf_counter() - t0) * 1000, 2), "branch": ""})
+    if guidance is not None:
+        out["patient_guidance"] = guidance["patient_guidance"]
     out["total_ms"] = round((time.perf_counter() - t_all) * 1000, 2)
     return out
 

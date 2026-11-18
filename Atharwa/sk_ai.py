@@ -72,6 +72,34 @@ def config(provider: str | None = None, api_key: str | None = None, model: str |
             "endpoint": os.getenv("AZURE_OPENAI_ENDPOINT", "")}
 
 
+# ─────────────── speed: one long-lived event loop + cached AI connectors ───────────────
+# asyncio.run() per call created a new loop, a new HTTP client and a new TLS connection every time
+# (~0.2 s locally + a fresh handshake to the provider). Now one background loop is reused, and each
+# provider/key/model keeps its connector, so HTTP keep-alive connections are reused across calls.
+import threading as _threading
+
+_LOOP = None
+_LOOP_LOCK = _threading.Lock()
+_SERVICES: dict = {}
+_KERNELS: dict = {}
+
+
+def _run(coro, timeout: float = 120):
+    global _LOOP
+    with _LOOP_LOCK:
+        if _LOOP is None:
+            _LOOP = asyncio.new_event_loop()
+            _threading.Thread(target=_LOOP.run_forever, name="sk-ai-loop", daemon=True).start()
+    return asyncio.run_coroutine_threadsafe(coro, _LOOP).result(timeout)
+
+
+def _service(cfg: dict):
+    key = (cfg["provider"], cfg["api_key"], cfg["model"], cfg.get("base_url"), cfg.get("endpoint"))
+    if key not in _SERVICES:
+        _SERVICES[key] = make_chat_service(cfg)
+    return _SERVICES[key]
+
+
 def make_chat_service(cfg: dict):
     """Create the Semantic Kernel AI connector for the chosen provider."""
     _require_sk()
@@ -96,10 +124,13 @@ def build_ai_kernel(cfg: dict | None = None):
     _require_sk()
     from framework_partA import build_full_kernel
     cfg = cfg or config()
-    kernel = build_full_kernel()
-    kernel.add_service(make_chat_service(cfg))
-    kernel.add_plugin(EligibilityDeskTools(), plugin_name="desk")
-    return kernel
+    key = (cfg["provider"], cfg["api_key"], cfg["model"], cfg.get("base_url"), cfg.get("endpoint"))
+    if key not in _KERNELS:                       # built once per provider/key/model, then reused
+        kernel = build_full_kernel()
+        kernel.add_service(_service(cfg))
+        kernel.add_plugin(EligibilityDeskTools(), plugin_name="desk")
+        _KERNELS[key] = kernel
+    return _KERNELS[key]
 
 
 # ─────────────────────────── 1. plain completion (used by LLM mode) ─────────
@@ -113,19 +144,17 @@ def _fast(cfg: dict) -> dict:
 
 
 async def _complete(prompt: str, cfg: dict) -> str:
-    kernel = Kernel()
-    kernel.add_service(make_chat_service(cfg))
-    chat = kernel.get_service(SERVICE_ID)
+    chat = _service(cfg)
     history = ChatHistory()
     history.add_user_message(prompt)
     settings = OpenAIChatPromptExecutionSettings(service_id=SERVICE_ID, temperature=0, max_tokens=1500, **_fast(cfg))
-    result = await chat.get_chat_message_content(history, settings, kernel=kernel)
+    result = await chat.get_chat_message_content(history, settings)
     return str(result)
 
 
 def complete(prompt: str, provider=None, api_key=None, model=None) -> str:
     """Send one prompt through the Semantic Kernel AI connector (sync wrapper)."""
-    return asyncio.run(_complete(prompt, config(provider, api_key, model)))
+    return _run(_complete(prompt, config(provider, api_key, model)))
 
 
 # ─────────────────────────── 2. agent chat with function calling ───────────
@@ -196,4 +225,4 @@ async def _ask(question: str, cfg: dict) -> dict:
 
 def ask(question: str, provider=None, api_key=None, model=None) -> dict:
     """Ask the Semantic Kernel agent a question; it calls our agents as tools."""
-    return asyncio.run(_ask(question, config(provider, api_key, model)))
+    return _run(_ask(question, config(provider, api_key, model)))

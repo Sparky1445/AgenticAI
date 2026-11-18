@@ -68,9 +68,11 @@ Protocol clauses (id | type | title | text):
 
 Tasks:
 1. Write 3 to 6 short search queries that capture this patient's eligibility-relevant facts (labs, drugs, diagnoses, history), using clinical synonyms where useful.
-2. For EVERY clause above, give a relevance score from 0 to 1 for deciding THIS patient's eligibility, and a reason of at most 15 words.
+2. For EVERY clause above, give a relevance score from 0 to 1 for deciding THIS patient's eligibility (put them in "scores").
+3. For ONLY the 6 most relevant clauses, add a reason of at most 8 words (put them in "reasons").
+Keep the output short: no extra text, no other fields.
 Do NOT decide eligibility. Return ONLY JSON in exactly this shape:
-{{"queries": ["..."], "clauses": [{{"id": "TRIAL01-INC-01", "relevance": 0.9, "reason": "..."}}]}}'''
+{{"queries": ["..."], "scores": {{"TRIAL01-INC-01": 0.9, "TRIAL01-EXC-02": 0.1}}, "reasons": {{"TRIAL01-INC-01": "HbA1c 8.2% within range"}}}}'''
 
 
 # ─────────────────────────── provider calls (stdlib only) ─────────────────
@@ -103,7 +105,8 @@ def _call_http(prompt: str, provider: str, api_key: str, model: str) -> str:
     if provider == "gemini":
         j = _post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}",
                   {"contents": [{"parts": [{"text": prompt}]}],
-                   "generationConfig": {"temperature": 0, "responseMimeType": "application/json"}}, {})
+                   "generationConfig": {"temperature": 0, "responseMimeType": "application/json",
+                                        **({"thinkingConfig": {"thinkingBudget": 0}} if "flash" in model else {})}}, {})
         return "".join(p.get("text", "") for p in j["candidates"][0]["content"]["parts"])
     if provider == "openai":
         j = _post("https://api.openai.com/v1/chat/completions",
@@ -126,7 +129,15 @@ def parse_response(text: str, valid_ids: set[str]) -> dict:
         raise ValueError("LLM did not return JSON")
     data = json.loads(m.group(0))
     ranking = {}
-    for c in data.get("clauses") or []:
+    # compact format (fast): {"scores": {id: rel}, "reasons": {id: text}}
+    reasons = data.get("reasons") or {}
+    for cid, rel in (data.get("scores") or {}).items():
+        if cid in valid_ids:
+            try:
+                ranking[cid] = {"relevance": round(max(0.0, min(1.0, float(rel))), 2), "reason": str(reasons.get(cid, ""))[:140]}
+            except (TypeError, ValueError):
+                pass
+    for c in data.get("clauses") or []:                # older verbose format still accepted
         cid = c.get("id")
         if cid not in valid_ids:                       # ignore invented clause IDs
             continue
