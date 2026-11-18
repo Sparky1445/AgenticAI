@@ -47,6 +47,11 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(DOCS), **kw)
 
+    def end_headers(self):
+        if not self.path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-cache")   # always serve the latest website files
+        super().end_headers()
+
     def log_message(self, fmt, *args):
         if self.path.startswith("/api/"):
             sys.stderr.write("  %s %s\n" % (self.command, self.path))
